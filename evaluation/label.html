@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>动作边界盲标</title>
+<style>
+:root{--bg:#fbf9fd;--card:#fff;--ink:#2a2635;--muted:#8b8299;--line:#e9e4f2;--accent:#7b5cd6;--warm:#c96a4a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.65 "Microsoft YaHei","Noto Sans SC",system-ui,sans-serif}
+header{padding:16px 22px;border-bottom:1px solid var(--line);background:var(--card);display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+h1{margin:0;font-size:16px;letter-spacing:.02em}
+.tag{font:11px/1.6 ui-monospace,monospace;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:18px;padding:18px 22px 60px;max-width:1500px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+video{width:100%;max-height:56vh;border-radius:10px;background:#000;display:block}
+.picks{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.picks li{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--line);border-radius:9px;cursor:pointer;font:13px/1.5 ui-monospace,monospace}
+.picks li.sel{border-color:var(--accent);background:#f4f0ff}
+.picks li span{flex:1}
+.picks li b{font-weight:600}
+.picks button{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;padding:0 4px}
+.picks button:hover{color:var(--warm)}
+.row{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+button.act{background:var(--accent);color:#fff;border:0;border-radius:9px;padding:9px 15px;cursor:pointer;font:inherit}
+button.ghost{background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:8px 13px;cursor:pointer;font:inherit}
+button:disabled{opacity:.45;cursor:not-allowed}
+select,input{font:inherit;border:1px solid var(--line);border-radius:9px;padding:7px 10px;background:#fff;color:var(--ink)}
+.clock{font:600 30px/1.1 ui-monospace,monospace;letter-spacing:.01em}
+.hint{color:var(--muted);font-size:12.5px;margin:10px 0 0}
+.done{color:#2f7a51}
+.warn{color:var(--warm)}
+.list{max-height:46vh;overflow:auto;margin-top:10px}
+.list div{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;font:13px/1.5 ui-monospace,monospace;cursor:pointer}
+.list div:hover{background:#f6f2ff}
+.list div.sel{background:#efe8ff;outline:1px solid var(--accent)}
+.list i{font-style:normal;color:var(--muted);width:22px}
+.list button{margin-left:auto;border:0;background:transparent;color:var(--muted);cursor:pointer}
+footer{padding:0 22px 40px;color:var(--muted);font-size:12.5px;max-width:1500px}
+.guide{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:#fcfbff}
+.guide summary{cursor:pointer;font-weight:600;font-size:13px}
+.guide ul{margin:8px 0 0;padding-left:20px;font-size:12.5px;line-height:1.75}
+.guide li b{color:var(--accent);font-weight:600}
+.guide p{margin:6px 0 0}
+</style></head><body>
+<header><h1>动作边界盲标</h1><span class="tag" id="progress"></span><span class="tag">空格打点 · ←→ 微调 · 0.5x 更准</span></header>
+<main>
+<section class="panel">
+  <video id="v" controls preload="auto"></video>
+  <div class="row"><span class="clock" id="clock">0.000</span>
+    <select id="rate"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="0.25">0.25x</option></select>
+    <button class="ghost" id="play">播放 / 暂停</button></div>
+  <ul class="picks" id="picks"></ul>
+</section>
+<section class="panel">
+  <div class="row" style="margin:0"><b id="name">—</b></div>
+  <p class="hint" id="meta"></p>
+  <div class="row"><button class="act" id="mark">打点（空格）</button><button class="ghost" id="back">−10ms</button><button class="ghost" id="fwd">+10ms</button><button class="ghost" id="undo">撤销</button></div>
+  <div class="list" id="list"></div>
+  <div class="row"><button class="act" id="confirm">确认本段</button><button class="ghost" id="reset">清空重标</button></div>
+  <p class="hint" id="status"></p>
+  <details class="guide"><summary>什么算一个边界？</summary>
+    <ul>
+      <li><b>算</b>：手型变了——掌 → 拳 → 伸食指 → 比心 → 捏。</li>
+      <li><b>算</b>：运动方向变了——向上挥突然改向下压。</li>
+      <li><b>算</b>：原来动的忽然定住并停住（收势也常是独立动作）。</li>
+      <li><b>不算</b>：同一个动作里手指微动、身体轻晃、呼吸起伏。</li>
+      <li><b>不算</b>：画面黑屏、遮挡、手出画——这些位置一律不打点。</li>
+      <li><b>不算</b>：为了让步骤卡看起来整齐而凑数。</li>
+    </ul>
+    <p class="hint">拿不准时问自己：<b>两帧可以合并成同一张教学图吗？</b>可以就不是边界。</p>
+  </details>
+  <div class="row"><button class="ghost" id="save">导出 truth.json</button></div>
+  <p class="hint">导出会下载一份完整文件，用它覆盖 <code>evaluation/truth.json</code>，再跑 check / report。</p>
+</section>
+</main>
+<footer>预测边界不在本页显示，避免"照着预测微调"造成锚定偏差。想对比时用 <code>python scripts/eval_truth.py report</code>。</footer>
+<script>
+const DATA = {"schema_version": "truth-2.0", "ground_truth_source": "agent-vision", "instructions": "空格键在当前播放位置打点，方向键微调 10ms。只标真正的手势动作起始时刻：手型或运动方向发生实质变化的那一下，不要以\"步骤卡好看\"为准，也不要把停顿当成边界。标完点「确认本段」，页面会记下你花的分钟数。", "videos": [{"source_id": "dbd9c7b610eb", "filename": "official-pose.mp4", "duration_ms": 2000, "review_video_id": "video_2e2b71f77b1c4818b44b208934c36ca2", "media_url": "/api/v1/videos/video_2e2b71f77b1c4818b44b208934c36ca2/media", "duplicate_video_ids": ["video_2e2b71f77b1c4818b44b208934c36ca2"], "predictions": [{"algo": "multi_feature", "video_id": "video_2e2b71f77b1c4818b44b208934c36ca2", "boundaries_ms": [0]}], "boundaries_truth_ms": [], "confirmed": false, "review_minutes": null}, {"source_id": "2da466c7ff5f", "filename": "屏幕录制 2026-11-01 015302.mp4", "duration_ms": 16933, "review_video_id": "video_7a4a44a556f1461691b5c68ec388948a", "media_url": "/api/v1/videos/video_7a4a44a556f1461691b5c68ec388948a/media", "duplicate_video_ids": ["video_7a4a44a556f1461691b5c68ec388948a", "video_d379f60c4fb746fcb7c7b34f70f4389b", "video_d2e17854ad294819b142ad91c279120b"], "predictions": [{"algo": "multi_feature", "video_id": "video_7a4a44a556f1461691b5c68ec388948a", "boundaries_ms": [0, 1066, 1733, 2667, 4133, 5066, 5866, 7200, 8133, 8800, 9600, 10266, 11200, 12000, 12800, 13567]}, {"algo": "wrist_speed", "video_id": "video_7a4a44a556f1461691b5c68ec388948a", "boundaries_ms": [0, 1200, 2000, 3600, 4533, 7733, 9467, 10533, 12267, 13067, 13567]}], "boundaries_truth_ms": [0, 800, 1200, 2800, 4400, 5800, 6400, 7400, 8200, 9200, 10400, 11400, 12200], "confirmed": true, "review_minutes": null, "confidence": "high", "annotation_note": "有效内容 0–13.5 秒，13.6 秒起为黑屏（录屏中断），黑屏段不打点。"}, {"source_id": "65a5790be543", "filename": "屏幕录制 2026-11-01 032037.mp4", "duration_ms": 18633, "review_video_id": "video_9f24bd561bf64339a9cd036460ebd639", "media_url": "/api/v1/videos/video_9f24bd561bf64339a9cd036460ebd639/media", "duplicate_video_ids": ["video_9f24bd561bf64339a9cd036460ebd639"], "predictions": [{"algo": "multi_feature", "video_id": "video_9f24bd561bf64339a9cd036460ebd639", "boundaries_ms": [0, 933, 2133, 2533, 2933, 3733, 4667, 5733, 6666, 7466, 8266, 9333, 10000, 10800, 11466, 12667, 13333, 14133, 15600, 16266, 16933, 17467], "note": "自动分段未应用"}, {"algo": "wrist_speed", "video_id": "video_9f24bd561bf64339a9cd036460ebd639", "boundaries_ms": [0, 4800, 11067, 17467]}], "boundaries_truth_ms": [0, 600, 2000, 3200, 3700, 5100, 6600, 7000, 8400, 8800, 10600, 12200, 13700, 14400, 15600, 16700], "confirmed": true, "review_minutes": null, "confidence": "medium", "annotation_note": "有效内容 0–17.5 秒，17.6 秒起画面变暗并出现加载圈。中段手臂动作密、有转身背对，个别边界置信度较低。"}, {"source_id": "8784529c08d0", "filename": "屏幕录制 2026-11-03 111546.mp4", "duration_ms": 29067, "review_video_id": "video_3bafb703f66049ec81923e5aad91d2fa", "media_url": "/api/v1/videos/video_3bafb703f66049ec81923e5aad91d2fa/media", "duplicate_video_ids": ["video_3bafb703f66049ec81923e5aad91d2fa"], "predictions": [{"algo": "multi_feature", "video_id": "video_3bafb703f66049ec81923e5aad91d2fa", "boundaries_ms": [0, 2533, 3333, 3733, 4400, 5066, 6266, 7066, 8000, 8667, 9600, 10800, 11733, 12800, 13600, 14000, 14666, 15333, 16133, 16800, 18133, 19333, 20133, 20933, 22133, 22666, 23333, 24933, 25733, 26233, 27867]}, {"algo": "wrist_speed", "video_id": "video_3bafb703f66049ec81923e5aad91d2fa", "boundaries_ms": [0, 3867, 6000, 13067, 14400, 16267, 25067, 26233]}], "boundaries_truth_ms": [0, 2650, 2930, 3470, 4530, 4800, 6130, 7470, 8500, 9330, 9870, 10130, 12000, 13070, 14670, 17330, 21600, 23330, 25330], "confirmed": true, "review_minutes": null, "confidence": "low", "annotation_note": "有效内容 0–26.2 秒，26.4 秒起画面变暗并出现加载圈。汉服外景，双手全程在胸/脸高度做小幅手型变化，同机位同类手型密集、袖子遮挡手腕，8.5 秒后部分边界仅按手位与开合变化判定，主观性较大。"}, {"source_id": "0bb84f67d8a4", "filename": "屏幕录制 2026-11-03 111652.mp4", "duration_ms": 23800, "review_video_id": "video_880e11f0f7b84c6fb5116f6bf1e92da5", "media_url": "/api/v1/videos/video_880e11f0f7b84c6fb5116f6bf1e92da5/media", "duplicate_video_ids": ["video_880e11f0f7b84c6fb5116f6bf1e92da5"], "predictions": [{"algo": "multi_feature", "video_id": "video_880e11f0f7b84c6fb5116f6bf1e92da5", "boundaries_ms": [0, 2400, 3467, 4800, 6533, 7333, 9466, 11066, 11733, 12800, 13466, 14133, 14800, 16000, 16666, 17866, 19066, 19733, 20500]}, {"algo": "wrist_speed", "video_id": "video_880e11f0f7b84c6fb5116f6bf1e92da5", "boundaries_ms": [0, 2667, 3733, 5067, 6000, 6800, 10533, 11467, 12933, 15067, 16267, 17733, 20500]}], "boundaries_truth_ms": [0, 2400, 2930, 4530, 5330, 6930, 7470, 9600, 11470, 12270, 13330, 14670, 16000, 16530, 17600, 18670, 19470], "confirmed": true, "review_minutes": null, "confidence": "medium", "annotation_note": "有效内容 0–20.4 秒，20.5 秒起画面变暗并出现加载圈。室内近景，手型以比心/V 字/握拳/指为主，姿态保持清晰；7.7–9.3 秒双手放下为停顿段，不作边界。"}, {"source_id": "26ab7d83a796", "filename": "屏幕录制 2026-11-03 112343.mp4", "duration_ms": 14400, "review_video_id": "video_5706a1f457e8409fb9a6a160d103c03a", "media_url": "/api/v1/videos/video_5706a1f457e8409fb9a6a160d103c03a/media", "duplicate_video_ids": ["video_5706a1f457e8409fb9a6a160d103c03a"], "predictions": [{"algo": "multi_feature", "video_id": "video_5706a1f457e8409fb9a6a160d103c03a", "boundaries_ms": [0, 4133, 4933, 5866, 6800, 7866, 8800, 10133, 10933, 11600, 12300]}, {"algo": "wrist_speed", "video_id": "video_5706a1f457e8409fb9a6a160d103c03a", "boundaries_ms": [0, 9067, 12300]}], "boundaries_truth_ms": [0, 4100, 4550, 5050, 6100, 8250, 8800, 9050, 10100], "confirmed": true, "review_minutes": null, "confidence": "medium", "annotation_note": "有效内容 0–12.4 秒，12.5 秒起出现加载圈。前 4 秒双手在身侧无动作（仅开始时刻打点）；4 秒后为平行掌/交叉/握拳三类姿态循环，10.1 秒后连续出拳属同一动作，不再拆步。"}], "annotator": "视觉模型逐帧判读（粗读 2fps 全片 + 4fps 细读，2026-11-03 批次），非人工", "criterion": "边界＝手型或运动方向发生实质变化、且该姿态保持约 0.4 秒以上的那一刻；同一连续动作的起落不拆成两步；不把节拍停顿当作边界；黑屏/无画面段不打点。", "labeled_at": "2026-11-03"};
+const BASE = 'http://127.0.0.1:8000';
+// 优先落到第一条"未确认且够长"的素材：几秒的冒烟测试片没有标注价值。
+const startAt = DATA.videos.findIndex(v => !v.confirmed && (v.duration_ms || 0) >= 3000);
+let idx = startAt >= 0 ? startAt : Math.max(0, DATA.videos.findIndex(v => !v.confirmed));
+let sel = -1;
+const clocks = new Map();
+const v = document.getElementById('v');
+const $ = id => document.getElementById(id);
+const mmss = ms => String(Math.floor(ms / 60000)).padStart(2, '0') + ':' + ((ms % 60000) / 1000).toFixed(3).padStart(6, '0');
+const cur = () => DATA.videos[idx];
+const truth = () => cur().boundaries_truth_ms || (cur().boundaries_truth_ms = []);
+function touch() { if (!clocks.has(idx)) clocks.set(idx, Date.now()); }
+function elapsed() { const t = clocks.get(idx); return t ? Math.max(1, Math.round((Date.now() - t) / 60000)) : 1; }
+
+function render() {
+  const item = cur();
+  $('progress').textContent = `已确认 ${DATA.videos.filter(x => x.confirmed).length} / ${DATA.videos.length}`;
+  $('picks').innerHTML = DATA.videos.map((x, i) =>
+    `<li class="${i === idx ? 'sel' : ''}" data-i="${i}"><b>${i + 1}</b><span>${x.filename || x.source_id}</span><em style="font-style:normal;color:${x.confirmed ? '#2f7a51' : '#8b8299'}">${x.confirmed ? '已确认' : (x.boundaries_truth_ms || []).length + ' 点'}</em></li>`).join('');
+  $('name').textContent = item.filename || item.source_id;
+  $('meta').textContent = `${(item.duration_ms / 1000).toFixed(2)} 秒`
+    + (item.duplicate_video_ids && item.duplicate_video_ids.length > 1 ? ` · 同源记录 ${item.duplicate_video_ids.length} 条已合并` : '');
+  item.boundaries_truth_ms = truth().slice().sort((a, b) => a - b);
+  const t = item.boundaries_truth_ms;
+  $('list').innerHTML = t.length
+    ? t.map((ms, i) => `<div class="${i === sel ? 'sel' : ''}" data-i="${i}"><i>${i + 1}</i>${mmss(ms)}<button data-del="${i}" title="删除">×</button></div>`).join('')
+    : '<p class="hint">还没有打点。播放时按空格记下每个动作的起点。</p>';
+  $('status').innerHTML = item.confirmed
+    ? `<span class="done">已确认 · 记录耗时 ${item.review_minutes} 分钟</span>`
+    : '<span class="warn">未确认：标完点「确认本段」才会进入统计</span>';
+  // 只有换视频才重设 src，否则每次打点都会把播放位置冲回 0。
+  const url = BASE + item.media_url;
+  if (v.getAttribute('data-src') !== url) { v.setAttribute('data-src', url); v.src = url; }
+}
+
+function select(i) { idx = i; sel = -1; v.pause(); render(); }
+
+$('picks').onclick = e => { const li = e.target.closest('li'); if (li) select(+li.dataset.i); };
+$('list').onclick = e => {
+  const del = e.target.closest('[data-del]');
+  if (del) { e.stopPropagation(); touch(); truth().splice(+del.dataset.del, 1); sel = -1; render(); return; }
+  const row = e.target.closest('[data-i]');
+  if (row) { sel = +row.dataset.i; v.currentTime = truth()[sel] / 1000; render(); }
+};
+function mark() {
+  if (!v.getAttribute('data-src')) return;
+  touch();
+  const ms = Math.round(v.currentTime * 100) * 10;
+  const list = truth();
+  if (list.some(x => Math.abs(x - ms) < 120)) { $('status').textContent = '离已有点太近（<120ms），忽略'; return; }
+  list.push(ms); list.sort((a, b) => a - b);
+  sel = list.indexOf(ms); render();
+}
+function nudge(delta) {
+  if (sel < 0 || !truth().length) return;
+  touch();
+  const list = truth();
+  const next = Math.max(0, list[sel] + delta);
+  list[sel] = next; list.sort((a, b) => a - b);
+  sel = list.indexOf(next); render();
+}
+$('mark').onclick = mark;
+$('undo').onclick = () => { touch(); const list = truth(); if (list.length) { list.pop(); sel = -1; render(); } };
+$('reset').onclick = () => { if (confirm('清空本段的真值？')) { truth().length = 0; cur().confirmed = false; cur().review_minutes = null; clocks.delete(idx); sel = -1; render(); } };
+$('play').onclick = () => { touch(); v.paused ? v.play() : v.pause(); };
+$('rate').onchange = e => v.playbackRate = +e.target.value;
+$('back').onclick = () => nudge(-10);
+$('fwd').onclick = () => nudge(10);
+$('confirm').onclick = () => {
+  const item = cur();
+  if (!truth().length) { $('status').textContent = '至少打一个点再确认'; return; }
+  const guess = Math.max(elapsed(), item.review_minutes || 0);
+  const input = prompt('这段视频你花了多少分钟？（用于回答"半自动比手工快多少"）', guess);
+  if (input === null) return;
+  item.review_minutes = Number(input) || guess;
+  item.confirmed = true;
+  clocks.delete(idx); render();
+  const next = DATA.videos.findIndex(x => !x.confirmed);
+  if (next >= 0) select(next);
+};
+$('save').onclick = () => {
+  const blob = new Blob([JSON.stringify(DATA, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'truth.json'; a.click();
+  URL.revokeObjectURL(a.href);
+};
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.code === 'Space') { e.preventDefault(); mark(); }
+  else if (e.code === 'ArrowLeft') { e.preventDefault(); nudge(-10); }
+  else if (e.code === 'ArrowRight') { e.preventDefault(); nudge(10); }
+});
+const tick = () => { $('clock').textContent = v.currentTime.toFixed(3); requestAnimationFrame(tick); };
+tick();
+render();
+</script></body></html>
